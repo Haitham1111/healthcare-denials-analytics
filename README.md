@@ -37,25 +37,32 @@ would triage its backlog every Monday morning.
 
 1. Generated the synthetic claim file with per-payer denial/appeal/AR behavior.
 2. Wrote six analysis queries in **SQL Server (T-SQL)** dialect (`sql/`), each
-   answering one business question. Query logic was executed against the CSV
-   to verify every number below.
+   answering one business question, and ran them in SSMS against a
+   `Healthcare_Denials` database on SQL Server (screenshots in `sql/results/`).
 3. Findings triaged the way a denials manager would: payer → reason → service
    line → appeal ROI → dollars at risk.
+4. Built a two-page **Power BI** dashboard on the same database (Power Query →
+   DAX measures → custom dark theme). Every dashboard number reconciles to the SQL output.
 
 ### Run it yourself (SQL Server / SSMS)
 
-```sql
-CREATE TABLE claims (
-    claim_id VARCHAR(20), payer_name VARCHAR(60), cpt_code VARCHAR(10),
-    diagnosis_code VARCHAR(10), billed_amount DECIMAL(10,2),
-    claim_status VARCHAR(10), denial_reason VARCHAR(90),
-    denial_date DATE, appeal_filed CHAR(1), appeal_outcome VARCHAR(20),
-    days_in_ar INT, service_date DATE
-);
-BULK INSERT claims FROM 'C:\path\to\claims.csv'
-WITH (FORMAT = 'CSV', FIRSTROW = 2, FIELDTERMINATOR = ',', ROWTERMINATOR = '\n');
--- then run sql/01 .. sql/06 top to bottom
-```
+1. Run `sql/00_setup_database.sql` on `.\SQLEXPRESS`. It creates the `Healthcare_Denials`
+   database, the `dbo.claims` table, and loads `data/claims.csv` with `BULK INSERT`
+   (edit the file path at the top if your copy lives elsewhere). Expect 4,200 claims, 1,198 denied.
+2. Run `sql/01` … `sql/06` top to bottom against `Healthcare_Denials`.
+
+Every query has been run in SSMS against the loaded database. The result screenshots are
+in [`sql/results/`](sql/results/):
+
+| Query | Result |
+|---|---|
+| Load check — 4,200 claims, 1,198 denied, $719,233 billed | [`00_load_verification.png`](sql/results/00_load_verification.png) |
+| 01 Denial rate by payer | [`01_denial_rate_by_payer.png`](sql/results/01_denial_rate_by_payer.png) |
+| 02 Denials by reason (CARC) | [`02_denials_by_reason.png`](sql/results/02_denials_by_reason.png) |
+| 03 Denial rate by CPT | [`03_denial_rate_by_cpt.png`](sql/results/03_denial_rate_by_cpt.png) |
+| 04 Appeal overturn rate by payer | [`04_appeal_overturn_rate_by_payer.png`](sql/results/04_appeal_overturn_rate_by_payer.png) |
+| 05 Days in AR by payer | [`05_days_in_ar_by_payer.png`](sql/results/05_days_in_ar_by_payer.png) |
+| 06 Revenue at risk | [`06_revenue_at_risk.png`](sql/results/06_revenue_at_risk.png) |
 
 ## Key findings (all numbers from the queries in `sql/`)
 
@@ -83,6 +90,25 @@ WITH (FORMAT = 'CSV', FIRSTROW = 2, FIELDTERMINATOR = ',', ROWTERMINATOR = '\n')
    in AR vs 28.8 for its paid claims — 3x slower. Every payer shows the same
    pattern: denials roughly triple days in AR.
 
+## Dashboard (Power BI)
+
+`healthcare-denials-dashboard.pbix` reads `dbo.claims` straight from SQL Server.
+Two pages, dark theme, rule-based color coding (red = act now, amber = watch, teal/green = healthy).
+
+**1. Denials Overview** — billed vs. denied dollars, claim denial rate, days in AR; denial
+rate by payer (red above 35%), denied dollars by CARC code, monthly denial-rate trend, payer slicer.
+
+![Denials Overview](reports/screenshots/01_denials_overview.png)
+
+**2. Appeals & At-Risk** — $150,135 revenue at risk across 889 claims, overturn rate on
+decided appeals (55.5%), payer overturn table (green ≥ 60%, red < 40%), CPT risk matrix
+(denial rate ≥ 30% highlighted), and revenue at risk by payer.
+
+![Appeals & At-Risk](reports/screenshots/02_appeals_and_at_risk.png)
+
+Measure definitions, the Power Query script, and how each one maps to the SQL are in
+[`reports/dax-measures.md`](reports/dax-measures.md).
+
 ## What I'd do with real data
 
 - **Join eligibility data** to separate true CO-96 (benefit exclusion) from
@@ -102,16 +128,23 @@ WITH (FORMAT = 'CSV', FIRSTROW = 2, FIELDTERMINATOR = ',', ROWTERMINATOR = '\n')
 ```
 healthcare-denials-analytics/
 ├── README.md
+├── healthcare-denials-dashboard.pbix   # Power BI dashboard (2 pages)
 ├── data/
 │   ├── claims.csv                  # synthetic claim-level dataset (4,200 rows)
 │   └── generate_synthetic_data.py  # the generator — rerun to reproduce
-└── sql/
-    ├── 01_denial_rate_by_payer.sql
-    ├── 02_denials_by_reason.sql
-    ├── 03_denial_rate_by_cpt.sql
-    ├── 04_appeal_overturn_rate_by_payer.sql
-    ├── 05_days_in_ar_by_payer.sql
-    └── 06_revenue_at_risk.sql
+├── sql/
+│   ├── 00_setup_database.sql       # create Healthcare_Denials + load claims.csv
+│   ├── 01_denial_rate_by_payer.sql
+│   ├── 02_denials_by_reason.sql
+│   ├── 03_denial_rate_by_cpt.sql
+│   ├── 04_appeal_overturn_rate_by_payer.sql
+│   ├── 05_days_in_ar_by_payer.sql
+│   ├── 06_revenue_at_risk.sql
+│   └── results/                    # SSMS screenshots of every query's output
+└── reports/
+    ├── dax-measures.md             # Power Query + DAX measure definitions
+    ├── denials-theme-dark.json     # custom report theme (light variant alongside)
+    └── screenshots/                # 01_denials_overview.png, 02_appeals_and_at_risk.png
 ```
 
 ## About
