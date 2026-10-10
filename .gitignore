@@ -3,3 +3,17 @@ __pycache__/
 *.pbix.bak
 ~*
 *.tmp
+# --- standard additions ---
+.env
+.env.*
+!.env.example
+*.pyc
+.venv/
+*.pbix.tmp
+.pbi/
+AutoRecovery/
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
